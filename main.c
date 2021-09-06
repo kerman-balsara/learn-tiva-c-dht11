@@ -107,7 +107,7 @@ int main(void)
             case READ_FROM_SENSOR:
                 if (now - previousClockTicks > 20)
                 {
-                    // Set trigger pin low and wait for response
+                    // Set trigger pin high and wait for response
                     GPIOC->DATA |= (1 << 4);
                     
                     IgnoreInterrupt = 0;
