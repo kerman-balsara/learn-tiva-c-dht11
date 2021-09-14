@@ -6,7 +6,7 @@
 
 // Make sure the power supply is on; otherwise you will not get a reading.
 
-// Tiva C components used: UART0, PC4 (for writing to and reading from the sensor), WTIMER0A (sensor pulse measurement), WTIMER5A (delays) 
+// Tiva C components used: UART0, PC4 (for writing to and reading from the sensor), WTIMER0A (sensor pulse measurement), SysTick (delays) 
 
 // In system_TM4C123.c, CLOCK_SETUP = 0; we are using 16MHz clock.
 
