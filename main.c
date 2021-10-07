@@ -37,6 +37,7 @@
 #define MAX_DATA 64
 static volatile uint32_t TimerValueArr[64];
 static volatile uint32_t TimerValueIdx;
+// Ignore all WTIMER0A interrupts until after the sensor data pin is set low for 20ms (see HOST_LOW_TIME).
 static volatile uint8_t IgnoreInterrupt;
 
 static volatile int32_t CurrentTicks;
