@@ -12,6 +12,7 @@
 
 #include "stdio.h"
 #include "stdlib.h"
+#include "math.h"
 
 #include "TM4C123GH6PM.h"
 #include "gpiortns.h"
@@ -24,6 +25,14 @@
 #define READ_FROM_SENSOR    2
 #define CALCULATE_RESULT    3
 
+#define HOST_WAIT_TIME      4000    // 4s (1s to allow previous values to settle and 3s between readings)
+#define HOST_LOW_TIME       20      // 20ms; datasheet indicates that this time must not be less than 18ms
+// As per datasheet, we should receive 80us low  + 80us high + 40 bits of data.
+// In the data, binary 0 is ~78us (50us low + 28us high) and binary 1 is ~120us (50us low and 70us high).
+// We assume all data received is binary 1.
+// Hence total wait time is 80 + 80 + (40 * 120) = 4960us = ~5ms. We wait 5ms to receive all data. 
+#define SLAVE_DATA_TIME     5       // Wait 5ms to receive all data from the sensor
+
 // Note: The DHT111 datasheet indicates 40 bits of data. Provide for 64 (testing shows we get 41 bits including the initial response from DHT11)
 #define MAX_DATA 64
 static volatile uint32_t TimerValueArr[64];
@@ -31,6 +40,10 @@ static volatile uint32_t TimerValueIdx;
 static volatile uint8_t IgnoreInterrupt;
 
 static volatile int32_t CurrentTicks;
+// The following variables are used to determine the time to wait to receive all data. Testing reveals it to be 3ms. The code waits 5ms. See
+// SLAVE_DATA_TIME above.
+static volatile int32_t FirstTicks;
+static volatile int32_t LastTicks;
 
 // Internal function prototypes
 static void setup_uart0(void);
@@ -82,7 +95,7 @@ int main(void)
                 for (uint32_t i = 0; i < MAX_DATA; i++)
                     TimerValueArr[i] = 0;
 
-                // Set trigger pin high for 4s (1s to allow previous values to settle and 3s between readings)
+                // Set trigger pin high based on HOST_WAIT_TIME
                 GPIOC->AFSEL &= (~1U << 4);
                 GPIOC->PCTL &= ~0x00070000U;
                 GPIOC->DIR |= (1 << 4);
@@ -93,9 +106,9 @@ int main(void)
                 break;
             
             case SET_OUTPUT_LOW:
-                if (now - previousClockTicks > 4000)
+                if (now - previousClockTicks > HOST_WAIT_TIME)
                 {
-                    // Set trigger pin low for 20ms
+                    // Set trigger pin low based on HOST_LOW_TIME
                     GPIOC->DATA &= ~(1U << 4);
 
                     previousClockTicks = now;
@@ -105,9 +118,9 @@ int main(void)
                 break;
             
             case READ_FROM_SENSOR:
-                if (now - previousClockTicks > 20)
+                if (now - previousClockTicks > HOST_LOW_TIME)
                 {
-                    // Set trigger pin high and wait for response
+                    // Set trigger pin high and wait for response based on SLAVE_DATA_TIME
                     GPIOC->DATA |= (1 << 4);
                     
                     IgnoreInterrupt = 0;
@@ -121,7 +134,7 @@ int main(void)
                 break;
 
             case CALCULATE_RESULT:    
-                if (now - previousClockTicks > 2000)
+                if (now - previousClockTicks > SLAVE_DATA_TIME)
                 {
                     show_result();
                     currentState = SET_OUTPUT_HIGH;
@@ -196,9 +209,11 @@ static void show_result(void)
     // Do parity check    
     if (total && total == number_arr[4])
     {
-        // All good.
+        // All good. Show relative humidity, temperature and time taken to receive data.
         char mesg[40 + 1];
-        sprintf(mesg, "RH=%d.%d%% T=%d.%dC\n\r\n\r", number_arr[0], number_arr[1], number_arr[2], number_arr[3]);
+        sprintf(mesg, "RH=%d.%d%% T=%d.%dC\n\r", number_arr[0], number_arr[1], number_arr[2], number_arr[3]);
+        printString(mesg);
+        sprintf(mesg, "Time=%dms\n\r\n\r", abs(LastTicks - FirstTicks));
         printString(mesg);
     }
     else
@@ -376,7 +391,12 @@ void WTIMER0A_Handler(void)
 {
     WTIMER0->ICR = (1 << 2);
     if (!IgnoreInterrupt)
+    {
+        if (TimerValueIdx == 0)
+            FirstTicks = CurrentTicks;
+        LastTicks = CurrentTicks;
         TimerValueArr[TimerValueIdx++] = WTIMER0->TAR;
+    }
 }
 
 static void setup_systick(void)
@@ -419,5 +439,4 @@ void SysTick_Handler(void)
 {
     CurrentTicks++;
 }
-
 
