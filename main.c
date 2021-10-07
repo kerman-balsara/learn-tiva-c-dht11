@@ -12,7 +12,6 @@
 
 #include "stdio.h"
 #include "stdlib.h"
-#include "math.h"
 
 #include "TM4C123GH6PM.h"
 #include "gpiortns.h"
